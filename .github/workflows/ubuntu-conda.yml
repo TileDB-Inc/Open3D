@@ -1,0 +1,106 @@
+name: Ubuntu Conda Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - gsk/gh-build-conda
+
+env:
+  NPROC: 2
+
+jobs:
+  build-conda-package:
+    name: Build conda package
+    runs-on: Ubuntu-18.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Setup cache
+        uses: actions/cache@v2
+        with:
+          # Ref: https://github.com/apache/incubator-mxnet/pull/18459/files
+          path: ~/.ccache
+          # We include the commit sha in the cache key, as new cache entries are
+          # only created if there is no existing entry for the key yet.
+          key: ${{ runner.os }}-ccache-${{ github.sha }}
+          # Restore any ccache cache entry, if none for
+          # ${{ runner.os }}-ccache-${{ github.sha }} exists.
+          # Common prefix will be used so that ccache can be used across commits.
+          restore-keys: |
+            ${{ runner.os }}-ccache
+      - name: Set up Python version
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: false
+          python-version: 3.7
+
+      # Pre-installed 18.04 packages: https://git.io/JfHmW
+      - name: Install dependencies
+        shell: bash -l {0}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorg-dev libglu1-mesa-dev python3-dev
+          wget -q https://github.com/intel-isl/open3d_downloads/releases/download/ccache/ccache
+          chmod +x ccache
+          sudo mv ccache /usr/local/bin
+          ccache -M 2G  # See .github/workflows/readme.md for ccache strategy.
+          conda install -y conda-build
+          python -m pip install -r python/requirements.txt
+
+      - name: Config and build package
+        shell: bash -l {0}
+        run: |
+          PATH=/usr/lib/ccache:$PATH
+          ccache -s
+
+          mkdir -p build
+          pushd build
+          set -x # Echo commands on
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF ..
+          make VERBOSE=1 -j"$NPROC" conda-package
+          set +x # Echo commands off
+          popd
+
+          ccache -s
+          CONDA_PKG_NAME="$(basename build/lib/python_package/conda_package/linux-64/open3d*.tar.bz2)"
+          echo "CONDA_PKG_NAME=$CONDA_PKG_NAME" >> $GITHUB_ENV
+
+      - name: Upload package
+        uses: actions/upload-artifact@v2
+        with:
+          name: open3d_linux_x86_64_package
+          path: build/lib/python_package/conda_package/linux-64/${{ env.CONDA_PKG_NAME }}
+          if-no-files-found: error
+
+  test-conda-package:
+    name: Test conda package
+    runs-on: ubuntu-18.04
+    needs: [build-conda-package]
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+        with:
+          submodules: false
+
+      - name: Download package
+        uses: actions/download-artifact@v2
+        # See https://github.com/dawidd6/action-download-artifact for more
+        # flexible artifact download options
+        with:
+          name: open3d_linux_x86_64_package
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+
+      - name: Test Python package
+        run: |
+          conda install open3d*.tar.bz2
+          python -c "import open3d; print('Installed:', open3d)"
+          python -c "import open3d; print('CUDA enabled: ', open3d.core.cuda.is_available())"
+          python -m pip install pytest
+          pytest python/test --ignore python/test/ml_ops --verbose
