@@ -87,6 +87,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: open3d_linux_x86_64_package
+          path: dist/
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -95,7 +96,7 @@ jobs:
 
       - name: Test Python package
         run: |
-          pip install open3d*.whl pytest
+          pip install dist/open3d*.whl pytest
           python -c "import open3d; print('Installed:', open3d)"
           python -c "import open3d; print('CUDA enabled: ', open3d.core.cuda.is_available())"
           pytest python/test --ignore python/test/ml_ops --verbose
