@@ -2,9 +2,9 @@ name: Build Wheel [Ubuntu]
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - gsk/gh-build-wheel
+#  push:
+#    branches:
+#      - gsk/gh-build-wheel
 
 jobs:
   build-wheel:
