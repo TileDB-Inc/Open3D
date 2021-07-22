@@ -2,12 +2,9 @@ name: Ubuntu Conda Build
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - gsk/gh-build-conda
-
-env:
-  NPROC: 2
+#  push:
+#    branches:
+#      - gsk/gh-build-conda
 
 jobs:
   build-conda-package:
@@ -32,7 +29,8 @@ jobs:
           # Common prefix will be used so that ccache can be used across commits.
           restore-keys: |
             ${{ runner.os }}-ccache
-      - name: Set up Python version
+
+      - name: Set up Python
         uses: conda-incubator/setup-miniconda@v2
         with:
           auto-update-conda: false
@@ -52,7 +50,7 @@ jobs:
           python -m pip install -r python/requirements.txt
 
       - name: Config and build package
-        shell: bash -l {0}
+#        shell: bash -l {0}
         run: |
           PATH=/usr/lib/ccache:$PATH
           ccache -s
@@ -61,7 +59,7 @@ jobs:
           pushd build
           set -x # Echo commands on
           cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF ..
-          make VERBOSE=1 -j"$NPROC" conda-package
+          make VERBOSE=1 -j2 conda-package
           set +x # Echo commands off
           popd
 
@@ -88,13 +86,13 @@ jobs:
 
       - name: Download package
         uses: actions/download-artifact@v2
-        # See https://github.com/dawidd6/action-download-artifact for more
-        # flexible artifact download options
         with:
           name: open3d_linux_x86_64_package
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: conda-incubator/setup-miniconda@v2
         with:
+          auto-update-conda: false
           python-version: 3.7
 
       - name: Test Python package
@@ -102,5 +100,5 @@ jobs:
           conda install open3d*.tar.bz2
           python -c "import open3d; print('Installed:', open3d)"
           python -c "import open3d; print('CUDA enabled: ', open3d.core.cuda.is_available())"
-          python -m pip install pytest
+          conda install -y pytest
           pytest python/test --ignore python/test/ml_ops --verbose

@@ -1,0 +1,47 @@
+name: Conda test and upload
+
+on:
+  workflow_dispatch:
+#  push:
+#    branches:
+#      - gsk/gh-build-conda
+
+
+jobs:
+  test-conda-package:
+    name: Test conda package
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+        with:
+          submodules: false
+
+      - name: Download package
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: ubuntu-conda.yml
+          run_id: 1054486284
+          name: open3d_linux_x86_64_package
+
+      - name: Set up Python
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: false
+          python-version: 3.7
+
+      - name: Test Python package
+        shell: bash -l {0}
+        run: |
+          set -x # Echo commands on
+          ls -ltr
+          conda info
+          which python
+          python --version
+
+          conda install open3d*.tar.bz2
+          python -c "import open3d; print('Installed:', open3d)"
+          python -c "import open3d; print('CUDA enabled: ', open3d.core.cuda.is_available())"
+
+          conda install -y pytest
+          pytest python/test --ignore python/test/ml_ops --verbose
