@@ -1,15 +1,18 @@
-name: Ubuntu Conda Build
+name: Build Wheel [Ubuntu]
 
 on:
   workflow_dispatch:
-#  push:
-#    branches:
-#      - gsk/gh-build-conda
+  push:
+    branches:
+      - gsk/gh-build-wheel
 
 jobs:
-  build-conda-package:
-    name: Build conda package
+  build-wheel:
+    name: Build wheel
     runs-on: Ubuntu-18.04
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v2
@@ -31,14 +34,12 @@ jobs:
             ${{ runner.os }}-ccache
 
       - name: Set up Python
-        uses: conda-incubator/setup-miniconda@v2
+        uses: actions/setup-python@v2
         with:
-          auto-update-conda: false
           python-version: 3.7
 
       # Pre-installed 18.04 packages: https://git.io/JfHmW
       - name: Install dependencies
-        shell: bash -l {0}
         run: |
           sudo apt-get update
           sudo apt-get install -y xorg-dev libglu1-mesa-dev python3-dev
@@ -46,11 +47,9 @@ jobs:
           chmod +x ccache
           sudo mv ccache /usr/local/bin
           ccache -M 2G  # See .github/workflows/readme.md for ccache strategy.
-          conda install -y conda-build
           python -m pip install -r python/requirements.txt
 
       - name: Config and build package
-#        shell: bash -l {0}
         run: |
           PATH=/usr/lib/ccache:$PATH
           ccache -s
@@ -59,25 +58,25 @@ jobs:
           pushd build
           set -x # Echo commands on
           cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF ..
-          make VERBOSE=1 -j2 conda-package
+          make VERBOSE=1 -j2 pip-package
           set +x # Echo commands off
           popd
 
           ccache -s
-          CONDA_PKG_NAME="$(basename build/lib/python_package/conda_package/linux-64/open3d*.tar.bz2)"
-          echo "CONDA_PKG_NAME=$CONDA_PKG_NAME" >> $GITHUB_ENV
+          PIP_PKG_NAME="$(basename build/lib/python_package/pip_package/open3d*.whl)"
+          echo "PIP_PKG_NAME=$PIP_PKG_NAME" >> $GITHUB_ENV
 
       - name: Upload package
         uses: actions/upload-artifact@v2
         with:
           name: open3d_linux_x86_64_package
-          path: build/lib/python_package/conda_package/linux-64/${{ env.CONDA_PKG_NAME }}
+          path: build/lib/python_package/pip_package/${{ env.PIP_PKG_NAME }}
           if-no-files-found: error
 
-  test-conda-package:
-    name: Test conda package
+  test-wheel:
+    name: Test wheel
     runs-on: ubuntu-18.04
-    needs: [build-conda-package]
+    needs: [build-wheel]
     steps:
       - name: Checkout source code
         uses: actions/checkout@v2
@@ -90,15 +89,13 @@ jobs:
           name: open3d_linux_x86_64_package
 
       - name: Set up Python
-        uses: conda-incubator/setup-miniconda@v2
+        uses: actions/setup-python@v2
         with:
-          auto-update-conda: false
           python-version: 3.7
 
       - name: Test Python package
         run: |
-          conda install open3d*.tar.bz2
+          pip install open3d*.whl pytest
           python -c "import open3d; print('Installed:', open3d)"
           python -c "import open3d; print('CUDA enabled: ', open3d.core.cuda.is_available())"
-          conda install -y pytest
           pytest python/test --ignore python/test/ml_ops --verbose
