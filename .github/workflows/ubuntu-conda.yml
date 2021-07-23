@@ -1,0 +1,97 @@
+name: Ubuntu Conda Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - gsk/gh-build-conda
+
+defaults:
+  run:
+    shell: bash -l {0}
+
+jobs:
+  build-conda-package:
+    runs-on: Ubuntu-18.04
+    outputs:
+      pkg_version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: false
+          python-version: 3.7
+          channels: conda-forge
+          channel-priority: strict
+
+      # Pre-installed 18.04 packages: https://git.io/JfHmW
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorg-dev libglu1-mesa-dev python3-dev
+          conda install -y conda-build
+          python -m pip install -r python/requirements.txt
+
+      - name: Config and build package
+        run: |
+          mkdir -p build
+          pushd build
+          set -x # Echo commands on
+          cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF -DBUILD_EXAMPLES=OFF ..
+          make VERBOSE=1 -j2 conda-package
+          set +x # Echo commands off
+          popd
+          mv build/lib/python_package/conda_package/linux-64/open3d*.tar.bz2 .
+
+      - name: Upload package as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: open3d_linux_x86_64_package
+          path: open3d*.tar.bz2
+          if-no-files-found: error
+
+      - name: Determine package version
+        id: get_version
+        run: |
+          tar -xjf open3d*.tar.bz2
+          echo "::set-output name=version::$(cat info/index.json | python -c 'import json, sys; print(json.load(sys.stdin)["version"])')"
+
+      - name: Test package
+        run: |
+          conda install -y numpy pytest
+          conda install open3d*.tar.bz2
+          python -c "import open3d; print('Installed:', open3d)"
+          python -c "import open3d; print('Version:', open3d.__version__)"
+          pytest python/test --ignore python/test/ml_ops --verbose
+
+      - name: Upload package to Anaconda
+        run: |
+          set -x
+          conda install -y anaconda-client
+          anaconda --verbose --token=${{ secrets.ANACONDA_TOKEN }} upload \
+            --user=tiledb --no-progress --skip-existing --label=main open3d*.tar.bz2
+
+  install-conda-package:
+    runs-on: ubuntu-18.04
+    needs: build-conda-package
+    steps:
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: false
+          python-version: 3.7
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Install package from Anaconda
+        run: |
+          set -x
+          version=${{needs.build-conda-package.outputs.pkg_version}}
+          conda install --channel=tiledb open3d=$version
+          python -c "import open3d; print('Installed:', open3d)"
+          python -c "import open3d; print('Version:', open3d.__version__)"
