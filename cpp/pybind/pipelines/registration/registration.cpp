@@ -684,9 +684,29 @@ void pybind_registration_methods(py::module &m) {
             map_shared_argument_docstrings);
 
     m.def("registration_fast_based_on_feature_matching",
-          &FastGlobalRegistration, py::call_guard<py::gil_scoped_release>(),
+          py::overload_cast<const geometry::PointCloud &,
+                            const geometry::PointCloud &, const Feature &,
+                            const Feature &,
+                            const FastGlobalRegistrationOption &>(
+                  &FastGlobalRegistration),
+          py::call_guard<py::gil_scoped_release>(),
           "Function for fast global registration based on feature matching",
           "source"_a, "target"_a, "source_feature"_a, "target_feature"_a,
+          "option"_a = FastGlobalRegistrationOption());
+    docstring::FunctionDocInject(m,
+                                 "registration_fast_based_on_feature_matching",
+                                 map_shared_argument_docstrings);
+
+    m.def("registration_fast_based_on_feature_matching",
+          py::overload_cast<const geometry::PointCloud &,
+                            const geometry::PointCloud &,
+                            const std::vector<std::pair<int, int>>, bool,
+                            const FastGlobalRegistrationOption &>(
+                  &FastGlobalRegistration),
+          py::call_guard<py::gil_scoped_release>(),
+          "Function for fast global registration based on feature matching",
+          "source"_a, "target"_a, "initial_corres"_a,
+          "initial_corres_swapped"_a = false,
           "option"_a = FastGlobalRegistrationOption());
     docstring::FunctionDocInject(m,
                                  "registration_fast_based_on_feature_matching",

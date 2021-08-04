@@ -298,6 +298,24 @@ RegistrationResult FastGlobalRegistration(
         const Feature& target_feature,
         const FastGlobalRegistrationOption& option /* =
         FastGlobalRegistrationOption()*/) {
+    bool initial_corres_swapped =
+            source.points_.size() <= target.points_.size();
+    std::vector<std::pair<int, int>> initial_corres =
+            initial_corres_swapped
+                    ? InitialMatching(target_feature, source_feature)
+                    : InitialMatching(source_feature, target_feature);
+
+    return FastGlobalRegistration(source, target, initial_corres,
+                                  initial_corres_swapped, option);
+}
+
+RegistrationResult FastGlobalRegistration(
+        const geometry::PointCloud& source,
+        const geometry::PointCloud& target,
+        const std::vector<std::pair<int, int>> initial_corres,
+        bool initial_corres_swapped, /* = false */
+        const FastGlobalRegistrationOption& option /* =
+        FastGlobalRegistrationOption()*/) {
     geometry::PointCloud source_orig = source;
     geometry::PointCloud target_orig = target;
 
@@ -310,17 +328,12 @@ RegistrationResult FastGlobalRegistration(
     std::tie(pcd_mean_vec, scale_global, scale_start) =
             NormalizePointCloud(point_cloud_vec, option);
 
-    // for AdvancedMatching ensure the first point cloud is the larger one
     std::vector<std::pair<int, int>> corres;
-    if (source.points_.size() > target.points_.size()) {
-        corres = AdvancedMatching(
-                source, target, InitialMatching(source_feature, target_feature),
-                option);
-    } else {
-        corres = AdvancedMatching(
-                target, source, InitialMatching(target_feature, source_feature),
-                option);
+    if (initial_corres_swapped) {
+        corres = AdvancedMatching(target, source, initial_corres, option);
         for (auto& p : corres) std::swap(p.first, p.second);
+    } else {
+        corres = AdvancedMatching(source, target, initial_corres, option);
     }
 
     Eigen::Matrix4d transformation;

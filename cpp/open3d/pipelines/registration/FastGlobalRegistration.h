@@ -113,6 +113,14 @@ RegistrationResult FastGlobalRegistration(
         const FastGlobalRegistrationOption &option =
                 FastGlobalRegistrationOption());
 
+RegistrationResult FastGlobalRegistration(
+        const geometry::PointCloud &source,
+        const geometry::PointCloud &target,
+        const std::vector<std::pair<int, int>> initial_corres,
+        bool initial_corres_swapped = false,
+        const FastGlobalRegistrationOption &option =
+                FastGlobalRegistrationOption());
+
 }  // namespace registration
 }  // namespace pipelines
 }  // namespace open3d
