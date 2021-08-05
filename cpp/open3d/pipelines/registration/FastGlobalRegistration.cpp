@@ -298,22 +298,20 @@ RegistrationResult FastGlobalRegistration(
         const Feature& target_feature,
         const FastGlobalRegistrationOption& option /* =
         FastGlobalRegistrationOption()*/) {
-    bool initial_corres_swapped =
-            source.points_.size() <= target.points_.size();
-    std::vector<std::pair<int, int>> initial_corres =
-            initial_corres_swapped
-                    ? InitialMatching(target_feature, source_feature)
-                    : InitialMatching(source_feature, target_feature);
-
-    return FastGlobalRegistration(source, target, initial_corres,
-                                  initial_corres_swapped, option);
+    std::vector<std::pair<int, int>> initial_corres;
+    if (source.points_.size() > target.points_.size()) {
+        initial_corres = InitialMatching(source_feature, target_feature);
+    } else {
+        initial_corres = InitialMatching(target_feature, source_feature);
+        for (auto& p : initial_corres) std::swap(p.first, p.second);
+    }
+    return FastGlobalRegistration(source, target, initial_corres, option);
 }
 
 RegistrationResult FastGlobalRegistration(
         const geometry::PointCloud& source,
         const geometry::PointCloud& target,
         const std::vector<std::pair<int, int>> initial_corres,
-        bool initial_corres_swapped, /* = false */
         const FastGlobalRegistrationOption& option /* =
         FastGlobalRegistrationOption()*/) {
     geometry::PointCloud source_orig = source;
@@ -328,17 +326,10 @@ RegistrationResult FastGlobalRegistration(
     std::tie(pcd_mean_vec, scale_global, scale_start) =
             NormalizePointCloud(point_cloud_vec, option);
 
-    std::vector<std::pair<int, int>> corres;
-    if (initial_corres_swapped) {
-        corres = AdvancedMatching(target, source, initial_corres, option);
-        for (auto& p : corres) std::swap(p.first, p.second);
-    } else {
-        corres = AdvancedMatching(source, target, initial_corres, option);
-    }
-
-    Eigen::Matrix4d transformation;
-    transformation = OptimizePairwiseRegistration(point_cloud_vec, corres,
-                                                  scale_global, option);
+    std::vector<std::pair<int, int>> corres =
+            AdvancedMatching(source, target, initial_corres, option);
+    Eigen::Matrix4d transformation = OptimizePairwiseRegistration(
+            point_cloud_vec, corres, scale_global, option);
 
     // as the original code T * point_cloud_vec[1] is aligned with
     // point_cloud_vec[0] matrix inverse is applied here.
